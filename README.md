@@ -35,7 +35,7 @@ python ./ImageText/end_to_end_test.py --cfg cfg/coco_eval.yml --data_dir CUB_PAT
 ```
 
 
-# project home page(coming soon)
+# project home page
 https://smallflyingpig.github.io/cross_modal_compression_mainpage/main.html
 
 # Acknowledgement
