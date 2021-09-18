@@ -1,0 +1,55 @@
+CONFIG_NAME: 'attn2'
+
+DATASET_NAME: 'birds'
+DATA_DIR: '../data/birds'
+GPU_ID: 0
+WORKERS: 4
+
+
+TREE:
+    BRANCH_NUM: 3
+
+
+TRAIN:
+    FLAG: True
+    NET_G: '' #'./pretrained_models/AttnGAN/bird_AttnGAN2.pth'
+    B_NET_D: True
+    BATCH_SIZE: 20  # 22
+    MAX_EPOCH: 100
+    SNAPSHOT_INTERVAL: 5
+    DISCRIMINATOR_LR: 0.0002
+    GENERATOR_LR: 0.0002
+    #
+    NET_E: '' #'./pretrained_models/DAMSM/bird/text_encoder200.pth'
+    SMOOTH:
+        GAMMA1: 4.0  # 1,2,5 good 4 best  10&100bad
+        GAMMA2: 5.0
+        GAMMA3: 10.0  # 10good 1&100bad
+        LAMBDA: 5.0
+
+
+GAN:
+    DF_DIM: 64
+    GF_DIM: 32
+    Z_DIM: 100
+    R_NUM: 2
+
+TEXT:
+    EMBEDDING_DIM: 256
+    CAPTIONS_PER_IMAGE: 10
+
+
+IMAGETEXT:
+    BATCH_SIZE: 32
+    ATTENTION_DIM: 512
+    EMBED_DIM: 512
+    DECODER_DIM: 512
+    ENCODER_LR: 0.0001
+    DECODER_LR: 0.0004
+    EPOCH: 100
+    PRINT_EVERY: 100
+    ALPHA_C: 1.0
+    SAVE_EVERY: 2
+  
+
+    

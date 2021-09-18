@@ -1,0 +1,56 @@
+CONFIG_NAME: 'glu-gan2'
+
+DATASET_NAME: 'coco'
+DATA_DIR: '../data/coco'
+GPU_ID: 0
+WORKERS: 8
+B_VALIDATION: TRUE
+
+TREE:
+    BRANCH_NUM: 3
+
+
+TRAIN:
+    FLAG: False
+    NET_G: 'output/textimage/arnold/text_encoder_0411/coco_glu-gan2_2020_04_11_21_05_47/Model/netG_epoch_10.pth' #'./pretrained_models/AttnGAN/coco_AttnGAN2.pth'  # '../models/coco_AttnGAN2.pth'
+    B_NET_D: True
+    BATCH_SIZE: 8  # 32
+    MAX_EPOCH: 120
+    SNAPSHOT_INTERVAL: 5
+    DISCRIMINATOR_LR: 0.0002
+    GENERATOR_LR: 0.0002
+    #
+    NET_E: './output/textimage_DAMSM/arnold/COCO2014/Model/text_encoder40.pth' #'./pretrained_models/DAMSM/coco/text_encoder100.pth'
+    SMOOTH:
+        GAMMA1: 4.0  # 1,2,5 good 4 best  10&100bad
+        GAMMA2: 5.0
+        GAMMA3: 10.0  # 10good 1&100bad
+        LAMBDA: 50.0
+
+
+GAN:
+    DF_DIM: 96
+    GF_DIM: 48
+    Z_DIM: 100
+    R_NUM: 3
+
+TEXT:
+    EMBEDDING_DIM: 256
+    CAPTIONS_PER_IMAGE: 5
+    WORDS_NUM: 20
+    MIN_WORD_FREQ: 5
+
+
+IMAGETEXT:
+    BATCH_SIZE: 32
+    ATTENTION_DIM: 512
+    EMBED_DIM: 512
+    DECODER_DIM: 512
+    ENCODER_LR: 0.0001
+    DECODER_LR: 0.0004
+    EPOCH: 100
+    PRINT_EVERY: 100
+    ALPHA_C: 1.0
+    SAVE_EVERY: 10
+    CHECKPOINT: './output/imagetext/coco_test_0/models/model_60.pickle'
+  
