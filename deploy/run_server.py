@@ -79,16 +79,16 @@ def index():
             image = prepare_image(image, target_size=(224, 224))
 
             # Classify the input image and then initialize the list of predictions to return to the client.
-            # preds = F.softmax(model(image), dim=1)
-            # results = torch.topk(preds.cpu().data, k=3, dim=1)
+            preds = F.softmax(model(image), dim=1)
+            results = torch.topk(preds.cpu().data, k=3, dim=1)
 
             data['predictions'] = list()
 
             # Loop over the results and add them to the list of returned predictions
-            # for prob, label in zip(results[0][0], results[1][0]):
-            #     label_name = idx2label[label]
-            #     r = {"label": label_name, "probability": float(prob)}
-            #     data['predictions'].append(r)
+            for prob, label in zip(results[0][0], results[1][0]):
+                label_name = idx2label[label.item()]
+                r = {"label": label_name, "probability": float(prob)}
+                data['predictions'].append(r)
 
             # Indicate that the request was a success.
             data["success"] = True
@@ -174,5 +174,10 @@ if __name__ == '__main__':
     print("Please wait until server has fully started")
     parser = argparse.ArgumentParser("flask server")
     parser.add_argument("--non_local", action='store_true', default=False, help="")
+    args = parser.parse_args()
     load_model()
-    app.run()
+    if args.non_local:
+        app.run(host='0.0.0.0', port=8090, debug=True)
+    else:
+        app.run()
+    
