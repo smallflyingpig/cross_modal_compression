@@ -37,7 +37,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     if args.non_local:
-        url = args.url + '/predict'
+        url = "http://" + args.url + '/predict'
     else:
         url = None 
     predict_result(args.file, url)

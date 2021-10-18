@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>跨模态压缩</title>
+</head>
+<body>
+    <h1>跨模态压缩</h1>
+    <form  style="margin:20px;border:1px solid red" method="post">
+        <input type="file" name='input_image' ><br/>
+<img src='' height="200" alt="Image preview area..." title="preview-img">
+<script>
+  var fileInput = document.querySelector('input[type=file]'),
+          previewImg = document.querySelector('img');
+  fileInput.addEventListener('change', function () {
+      var file = this.files[0];
+      var reader = new FileReader();
+      // 监听reader对象的的onload事件，当图片加载完成时，把base64编码賦值给预览图片
+      reader.addEventListener("load", function () {
+          previewImg.src = reader.result;
+      }, false);
+      // 调用reader.readAsDataURL()方法，把图片转成base64
+      reader.readAsDataURL(file);
+  }, false);
+</script>
+<br/>
+        <img style="width:180px" src="data:;base64,{{ img_stream }}"><br/>
+        <span>压缩:</span><textarea name="compression" id="compression" cols="60" rows="10">{{ result_str }}</textarea><br/>
+        <span>重构:</span><textarea name="result" id="result" cols="60" rows="10">{{ result_rec }}</textarea><br/>
+        <button type="submit" id="submit">Submit</button>
+    </form>
+
+</body>
+</html>
