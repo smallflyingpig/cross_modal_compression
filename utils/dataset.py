@@ -120,6 +120,27 @@ def get_imgs(img_path, imsize, bbox=None,
 
     return ret
 
+def get_img_tensor(img, imsize, bbox=None,
+             transform=None, normalize=None):
+    width, height = img.size
+    if bbox is not None:
+        r = int(np.maximum(bbox[2], bbox[3]) * 0.75)
+        center_x = int((2 * bbox[0] + bbox[2]) / 2)
+        center_y = int((2 * bbox[1] + bbox[3]) / 2)
+        y1 = np.maximum(0, center_y - r)
+        y2 = np.minimum(height, center_y + r)
+        x1 = np.maximum(0, center_x - r)
+        x2 = np.minimum(width, center_x + r)
+        img = img.crop([x1, y1, x2, y2])
+
+    if transform is not None:
+        img = transform(img)
+    
+    img = transforms.Resize(imsize)(img)
+    img = transforms.ToTensor()(img)
+    img = normalize(img)
+    return img
+
 
 class TextDataset(data.Dataset):
     def __init__(self, data_dir, split='train',

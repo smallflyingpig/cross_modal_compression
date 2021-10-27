@@ -11,6 +11,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from nltk.translate.bleu_score import corpus_bleu
 import numpy as np 
+from utils.dataset import get_img_tensor
+from PIL import Image
 
 
 
@@ -41,13 +43,172 @@ def load_raw_checkpoint(path:str):
     # encoder_optimizer = checkpoint['encoder_optimizer']
     return encoder, decoder
 
+
+class Evaluator(object):
+    def __init__(self, cfg, dataset, data_dir, imsize, beam_size):
+        self.cfg = cfg
+        self.dataset = dataset
+        self.data_dir = data_dir
+        self.beam_size = beam_size
+        self.cuda = torch.cuda.is_available()
+
+        self.norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        train_transform = transforms.Compose([
+            transforms.Scale(int(imsize * 76 / 64)),
+            transforms.RandomCrop(imsize),
+        ])
+        val_transform = transforms.Compose([
+            transforms.Scale(int(imsize * 76 / 64)),
+            transforms.CenterCrop(imsize),
+        ])
+        if self.dataset == 'bird':
+            self.train_dataset = ImageTextDataset(self.data_dir, 'train',
+            transform=train_transform, sample_type='train')
+
+            self.val_dataset = ImageTextDataset(self.data_dir, 'test', 
+                transform=val_transform, sample_type='test')
+        elif self.dataset == 'coco':
+            self.train_dataset = CaptionDataset(self.data_dir, 'train',
+                transform=train_transform, sample_type='train',
+                coco_data_json=self.coco_data_json)
+            self.val_dataset = CaptionDataset(self.data_dir, 'val', 
+                transform=val_transform, sample_type='val', 
+                coco_data_json=self.coco_data_json)
+        else:
+            raise NotImplementedError
+        encoder = Encoder()
+        encoder.fine_tune(False)
+        decoder =  DecoderWithAttention(attention_dim=self.cfg.IMAGETEXT.ATTENTION_DIM,
+                embed_dim=self.cfg.IMAGETEXT.EMBED_DIM,
+                decoder_dim=self.cfg.IMAGETEXT.DECODER_DIM,
+                vocab_size=self.val_dataset.n_words)
+
+        self.encoder, self.decoder = load_checkpoint(encoder, decoder, self.cfg.IMAGETEXT.CHECKPOINT)
+        if self.cuda:
+            self.encoder, self.decoder = self.encoder.cuda(), self.decoder.cuda()
+        
+        self.word_map = self.val_dataset.wordtoix
+        self.ixtoword = self.val_dataset.ixtoword
+        self.vocab_size = self.val_dataset.n_words
+        self.imsize = cfg.TREE.BASE_SIZE * (2**(cfg.TREE.BRANCH_NUM-1))
+
+    def forward_one_img(self, img, bbox=None):
+        img_tensor = get_img_tensor(img, imsize=self.imsize, bbox=bbox, transform=None, normalize=self.norm).unsqueeze(0)
+        print(img_tensor.shape)
+        if self.cuda:
+            img_tensor = img_tensor.cuda()
+        encoder_out = self.encoder(img_tensor)
+        enc_img_size, encoder_dim = encoder_out.size(1), encoder_out.size(3)
+        # Flatten encoding
+        encoder_out = encoder_out.view(1, -1, encoder_dim)  # (1, num_pixels, encoder_dim)
+        num_pixels = encoder_out.size(1)
+
+        # We'll treat the problem as having a batch size of k
+        encoder_out = encoder_out.expand(self.beam_size, num_pixels, encoder_dim)  # (k, num_pixels, encoder_dim)
+
+        # Tensor to store top k previous words at each step; now they're just <start>
+        k_prev_words = torch.LongTensor([[self.word_map['<start>']]] * self.beam_size).cuda()  # (k, 1)
+
+        # Tensor to store top k sequences; now they're just <start>
+        seqs = k_prev_words  # (k, 1)
+
+        # Tensor to store top k sequences' scores; now they're just 0
+        top_k_scores = torch.zeros(self.beam_size, 1).cuda()  # (k, 1)
+
+        # Lists to store completed sequences and scores
+        complete_seqs = list()
+        complete_seqs_scores = list()
+
+        # Start decoding
+        step = 1
+        k = self.beam_size
+        h, c = self.decoder.init_hidden_state(encoder_out)
+        # s is a number less than or equal to k, because sequences are removed from this process once they hit <end>
+        # alphas = []
+        while True:
+
+            embeddings = self.decoder.embedding(k_prev_words).squeeze(1)  # (s, embed_dim)
+
+            awe, alpha = self.decoder.attention(encoder_out, h)  # (s, encoder_dim), (s, num_pixels)
+            # alphas.append(alpha)
+
+            gate = self.decoder.sigmoid(self.decoder.f_beta(h))  # gating scalar, (s, encoder_dim)
+            awe = gate * awe
+
+            h, c = self.decoder.decode_step(torch.cat([embeddings, awe], dim=1), (h, c))  # (s, decoder_dim)
+
+            scores = self.decoder.fc(h)  # (s, vocab_size)
+            scores = F.log_softmax(scores, dim=1)
+
+            # Add
+            scores = top_k_scores.expand_as(scores) + scores  # (s, vocab_size)
+
+            # For the first step, all k points will have the same scores (since same k previous words, h, c)
+            if step == 1:
+                top_k_scores, top_k_words = scores[0].topk(self.beam_size, 0, True, True)  # (s)
+            else:
+                # Unroll and find top scores, and their unrolled indices
+                top_k_scores, top_k_words = scores.view(-1).topk(self.beam_size, 0, True, True)  # (s)
+
+            # Convert unrolled indices to actual indices of scores
+            prev_word_inds = top_k_words // self.vocab_size  # (s)
+            next_word_inds = top_k_words % self.vocab_size  # (s)
+
+            # Add new words to sequences
+            seqs = torch.cat([seqs[prev_word_inds], next_word_inds.unsqueeze(1)], dim=1)  # (s, step+1)
+
+            # Which sequences are incomplete (didn't reach <end>)?
+            incomplete_inds = [ind for ind, next_word in enumerate(next_word_inds) if
+                               next_word != self.word_map['<end>']]
+            complete_inds = list(set(range(len(next_word_inds))) - set(incomplete_inds))
+
+            # Set aside complete sequences
+            if len(complete_inds) > 0:
+                complete_seqs.extend(seqs[complete_inds].tolist())
+                complete_seqs_scores.extend(top_k_scores[complete_inds])
+            k -= len(complete_inds)  # reduce beam length accordingly
+
+            # Proceed with incomplete sequences
+            if k <= 0:
+                break
+            seqs = seqs[incomplete_inds]
+            h = h[prev_word_inds[incomplete_inds]]
+            c = c[prev_word_inds[incomplete_inds]]
+            encoder_out = encoder_out[prev_word_inds[incomplete_inds]]
+            top_k_scores = top_k_scores[incomplete_inds].unsqueeze(1)
+            k_prev_words = next_word_inds[incomplete_inds].unsqueeze(1)
+
+            # Break if things have been going on too long
+            if step > 50:
+                print("the sentence is too long, break it")
+                break
+            step += 1
+        # save alphas
+        # with open('./alphas.pickle', 'wb') as fp:
+        #     pickle.dump(alphas, fp)
+        #     exit(0)
+
+        i = complete_seqs_scores.index(max(complete_seqs_scores))
+        seq = complete_seqs[i]
+
+        
+        # Hypotheses
+        hyp = [w for w in seq if w not in {self.word_map['<start>'], self.word_map['<end>'], self.word_map['<pad>']}]
+        hyp_str = ' '.join([self.ixtoword[_h] for _h in hyp])
+        return hyp_str 
+
+
+
+
+
+
 @torch.no_grad()
 def evaluate(val_dataloader:DataLoader, 
             encoder:Encoder, decoder:DecoderWithAttention, 
             outputer:Outputer,
             beam_size:int, pred_file:str):
     encoder.eval()
-    decoder.eval()
+    decoder.eval()  
     word_map = val_dataloader.dataset.wordtoix
     ixtoword = val_dataloader.dataset.ixtoword
     vocab_size = val_dataloader.dataset.n_words
@@ -117,7 +278,7 @@ def evaluate(val_dataloader:DataLoader,
                 top_k_scores, top_k_words = scores.view(-1).topk(beam_size, 0, True, True)  # (s)
 
             # Convert unrolled indices to actual indices of scores
-            prev_word_inds = top_k_words / vocab_size  # (s)
+            prev_word_inds = top_k_words // vocab_size  # (s)
             next_word_inds = top_k_words % vocab_size  # (s)
 
             # Add new words to sequences
@@ -233,10 +394,30 @@ def main(args):
                             encoder, decoder, 
                             outputer,
                             args.beam_size, pred_file)
-    outputer.log("eval result: {}".format(dict2str(eval_rtn)))
+    outputer.log("eval result: {}".format(eval_rtn['bleu4']))
     
+
+def main_evaluator(args):
+    cfg_from_file(args.cfg)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    outputer = Outputer(args.output_dir, cfg.IMAGETEXT.PRINT_EVERY, cfg.IMAGETEXT.SAVE_EVERY)
+    outputer.log(cfg)
+    imsize = cfg.TREE.BASE_SIZE * (2 **(cfg.TREE.BRANCH_NUM - 1))
+
+    evaluator = Evaluator(cfg, dataset=args.dataset, data_dir=args.data_dir, imsize=imsize, beam_size=args.beam_size)
+    
+    # for CUB dataset
+    for idx, filename in enumerate(evaluator.val_dataset.filenames):
+        file_path = '%s/CUB_200_2011/images/%s.jpg' % (args.data_dir, filename)
+        img = Image.open(file_path).convert('RGB')
+        des = evaluator.forward_one_img(img)
+        print(des)
+        
 
 
 if __name__=="__main__":
     args = get_parser()
     main(args)
+    # main_evaluator(args)

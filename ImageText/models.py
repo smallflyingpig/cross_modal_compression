@@ -1,9 +1,8 @@
 import torch
 from torch import nn
 import torchvision
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+# fork from: https://raw.githubusercontent.com/sgrvinod/a-PyTorch-Tutorial-to-Image-Captioning/master/models.py
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Encoder(nn.Module):
     """
@@ -28,7 +27,8 @@ class Encoder(nn.Module):
     def forward(self, images):
         """
         Forward propagation.
-        :param images: images, a tensor of dimensions (batch_size, 3, image_size, image_size)
+
+        :param images: images, a tensor of dimensions (batch_size, 3, image_size, image_size), image_size=256?
         :return: encoded images
         """
         out = self.resnet(images)  # (batch_size, 2048, image_size/32, image_size/32)
@@ -39,6 +39,7 @@ class Encoder(nn.Module):
     def fine_tune(self, fine_tune=True):
         """
         Allow or prevent the computation of gradients for convolutional blocks 2 through 4 of the encoder.
+
         :param fine_tune: Allow?
         """
         for p in self.resnet.parameters():
@@ -70,6 +71,7 @@ class Attention(nn.Module):
     def forward(self, encoder_out, decoder_hidden):
         """
         Forward propagation.
+
         :param encoder_out: encoded images, a tensor of dimension (batch_size, num_pixels, encoder_dim)
         :param decoder_hidden: previous decoder output, a tensor of dimension (batch_size, decoder_dim)
         :return: attention weighted encoding, weights
@@ -129,6 +131,7 @@ class DecoderWithAttention(nn.Module):
     def load_pretrained_embeddings(self, embeddings):
         """
         Loads embedding layer with pre-trained embeddings.
+
         :param embeddings: pre-trained embeddings
         """
         self.embedding.weight = nn.Parameter(embeddings)
@@ -136,6 +139,7 @@ class DecoderWithAttention(nn.Module):
     def fine_tune_embeddings(self, fine_tune=True):
         """
         Allow fine-tuning of embedding layer? (Only makes sense to not-allow if using pre-trained embeddings).
+
         :param fine_tune: Allow?
         """
         for p in self.embedding.parameters():
@@ -144,6 +148,7 @@ class DecoderWithAttention(nn.Module):
     def init_hidden_state(self, encoder_out):
         """
         Creates the initial hidden and cell states for the decoder's LSTM based on the encoded images.
+
         :param encoder_out: encoded images, a tensor of dimension (batch_size, num_pixels, encoder_dim)
         :return: hidden state, cell state
         """
@@ -155,6 +160,7 @@ class DecoderWithAttention(nn.Module):
     def forward(self, encoder_out, encoded_captions, caption_lengths):
         """
         Forward propagation.
+
         :param encoder_out: encoded images, a tensor of dimension (batch_size, enc_image_size, enc_image_size, encoder_dim)
         :param encoded_captions: encoded captions, a tensor of dimension (batch_size, max_caption_length)
         :param caption_lengths: caption lengths, a tensor of dimension (batch_size, 1)
@@ -164,13 +170,13 @@ class DecoderWithAttention(nn.Module):
         batch_size = encoder_out.size(0)
         encoder_dim = encoder_out.size(-1)
         vocab_size = self.vocab_size
-
+        # print(min(caption_lengths).data)
         # Flatten image
         encoder_out = encoder_out.view(batch_size, -1, encoder_dim)  # (batch_size, num_pixels, encoder_dim)
         num_pixels = encoder_out.size(1)
 
         # Sort input data by decreasing lengths; why? apparent below
-        caption_lengths, sort_ind = caption_lengths.squeeze(1).sort(dim=0, descending=True)
+        caption_lengths, sort_ind = caption_lengths.squeeze().sort(dim=0, descending=True)
         encoder_out = encoder_out[sort_ind]
         encoded_captions = encoded_captions[sort_ind]
 
@@ -182,11 +188,13 @@ class DecoderWithAttention(nn.Module):
 
         # We won't decode at the <end> position, since we've finished generating as soon as we generate <end>
         # So, decoding lengths are actual lengths - 1
-        decode_lengths = (caption_lengths - 1).tolist()
-
+        # decode_lengths = caption_lengths.tolist()
+        decode_lengths = (caption_lengths - 1) #.tolist()
+        decode_lengths[decode_lengths==0] = 1
+        decode_lengths = decode_lengths.tolist()
         # Create tensors to hold word predicion scores and alphas
-        predictions = torch.zeros(batch_size, max(decode_lengths), vocab_size).to(device)
-        alphas = torch.zeros(batch_size, max(decode_lengths), num_pixels).to(device)
+        predictions = torch.zeros(batch_size, max(decode_lengths), vocab_size).to(encoder_out.device)
+        alphas = torch.zeros(batch_size, max(decode_lengths), num_pixels).to(encoder_out.device)
 
         # At each time-step, decode by
         # attention-weighing the encoder's output based on the decoder's previous hidden state output
@@ -205,3 +213,9 @@ class DecoderWithAttention(nn.Module):
             alphas[:batch_size_t, t, :] = alpha
 
         return predictions, encoded_captions, decode_lengths, alphas, sort_ind
+
+def load_checkpoint(encoder:torch.nn.Module, decoder:torch.nn.Module, path):
+    cp_data = torch.load(path)
+    encoder.load_state_dict(cp_data['encoder'])
+    decoder.load_state_dict(cp_data['decoder'])
+    return encoder, decoder

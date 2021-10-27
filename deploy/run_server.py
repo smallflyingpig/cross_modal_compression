@@ -1,5 +1,6 @@
 # encoding: utf-8
 # reference: https://github.com/L1aoXingyu/deploy-pytorch-model
+from ImageText.train import load_raw_checkpoint
 import io
 import json, os
 import argparse
@@ -12,12 +13,14 @@ from PIL import Image
 from torch import nn
 from torchvision import transforms as T
 from torchvision.models import resnet50
+from ImageText.eval import Evaluator, evaluate
+from utils.config import cfg_from_file, cfg
 
 from flask import render_template
 
 # Initialize our Flask application and the PyTorch model.
 app = flask.Flask(__name__)
-model = None
+g_evaluator = None
 use_gpu = torch.cuda.is_available()
 
 """Utilities
@@ -49,8 +52,8 @@ def np_to_base64(img_np):
     img.save(buffered, format="PNG")
     return u"data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode("ascii")
 
-with open('imagenet_class.txt', 'r') as f:
-    idx2label = eval(f.read())
+# with open('imagenet_class.txt', 'r') as f:
+#    idx2label = eval(f.read())
 
 
 def load_model():
@@ -165,40 +168,11 @@ def return_img_stream(img_local_path):
 
 @app.route("/cross_modal_compression_mini", methods=["POST", 'GET'])
 def cross_modal_compression():
-    data = {"success": False, 'result_str':'', 'result_rec':'', 'img_path':'', 'img_stream': None}
-    if flask.request.method == 'POST':
-        img_path = flask.request.form.get("input_image")
-        if img_path is not None and img_path != '':
-            data['img_path'] = img_path
-            # image = image.read()
-            image_raw = Image.open(img_path)
+    return render_template("cross_modal_compression_mini.html")
 
-            # Preprocess the image and prepare it for classification.
-            image = prepare_image(image_raw, target_size=(224, 224))
-
-            # Classify the input image and then initialize the list of predictions to return to the client.
-            preds = F.softmax(model(image), dim=1)
-            results = torch.topk(preds.cpu().data, k=3, dim=1)
-
-            data['predictions'] = list()
-
-            # Loop over the results and add them to the list of returned predictions
-            result_list = []
-            for prob, label in zip(results[0][0], results[1][0]):
-                label_name = idx2label[label.item()]
-                r = {"label": label_name, "probability": float(prob)}
-                data['predictions'].append(r)
-                result_list.append(f"{label_name}:{prob}")
-                
-            result_str = '\n'.join(result_list)
-            # Indicate that the request was a success.
-            data["success"] = True
-            data['result_str'] = result_str
-            data['img_stream'] = return_img_stream(img_path)
-
-    # print(data['result_str'], image, flask.request.files.keys(), flask.request.form.keys())
-    # print(data['img_stream'])
-    return render_template("cross_modal_compression_mini.html", result_str=data['result_str'], result_rec=data['result_rec'], img_path=data['img_path'], img_stream=data['img_stream'])
+def image2text(img):
+    des = g_evaluator.forward_one_img(img)
+    return des
 
 
 @app.route('/cross_modal_compression/predict', methods=['GET', 'POST'])
@@ -218,7 +192,7 @@ def predict():
         pred_proba = '1.0'
         # pred_class = decode_predictions(preds, top=1)   # ImageNet Decode
 
-        result = "cat" # str(pred_class[0][0][1])               # Convert to string
+        result = image2text(img) # str(pred_class[0][0][1])               # Convert to string
         result = result.replace('_', ' ').capitalize()
         
         # Serialize the result, you can add additional fields
@@ -231,8 +205,15 @@ if __name__ == '__main__':
     print("Please wait until server has fully started")
     parser = argparse.ArgumentParser("flask server")
     parser.add_argument("--non_local", action='store_true', default=False, help="")
+    parser.add_argument("--cfg", type=str, default='./cfg/bird_eval.cfg')
+    parser.add_argument("--beam_size", type=int, default=4, help="")
+    parser.add_argument("--dataset", choices=['coco', 'bird'], default='bird', help="")
+    parser.add_argument("--data_dir", type=str, default="./data/birds", help="")
     args = parser.parse_args()
-    load_model()
+    cfg_from_file(args.cfg)
+    imsize = cfg.TREE.BASE_SIZE * (2 **(cfg.TREE.BRANCH_NUM - 1))
+    g_evaluator = Evaluator(cfg, args.dataset, args.data_dir, imsize, args.beam_size)
+
     if args.non_local:
         app.run(host='0.0.0.0', port=8090, debug=True)
     else:

@@ -8,7 +8,7 @@ import torchvision.transforms as transforms
 # sys.path.append(os.path.abspath(".."))
 from utils.dataset import ImageTextDataset, CaptionDataset
 from utils.config import cfg, cfg_from_file
-from models import Encoder, DecoderWithAttention, load_checkpoint
+from ImageText.models import Encoder, DecoderWithAttention, load_checkpoint
 from utils.util import RunningAverage, dict2str, save_dict_models,\
      load_dict_models, Outputer
 from nltk.translate.bleu_score import corpus_bleu
