@@ -45,12 +45,12 @@ def load_raw_checkpoint(path:str):
 
 
 class Evaluator(object):
-    def __init__(self, cfg, dataset, data_dir, imsize, beam_size):
+    def __init__(self, cfg, dataset, data_dir, imsize, beam_size, gpu):
         self.cfg = cfg
         self.dataset = dataset
         self.data_dir = data_dir
         self.beam_size = beam_size
-        self.cuda = torch.cuda.is_available()
+        self.cuda = gpu>=0 and torch.cuda.is_available()
 
         self.norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         train_transform = transforms.Compose([
@@ -93,8 +93,11 @@ class Evaluator(object):
         self.imsize = cfg.TREE.BASE_SIZE * (2**(cfg.TREE.BRANCH_NUM-1))
 
     def forward_one_img(self, img, bbox=None):
+
         img_tensor = get_img_tensor(img, imsize=self.imsize, bbox=bbox, transform=None, normalize=self.norm).unsqueeze(0)
         print(img_tensor.shape)
+        if img_tensor.shape[1]>3:
+            img_tensor = img_tensor[:, :3, :, :]
         if self.cuda:
             img_tensor = img_tensor.cuda()
         encoder_out = self.encoder(img_tensor)
@@ -107,13 +110,17 @@ class Evaluator(object):
         encoder_out = encoder_out.expand(self.beam_size, num_pixels, encoder_dim)  # (k, num_pixels, encoder_dim)
 
         # Tensor to store top k previous words at each step; now they're just <start>
-        k_prev_words = torch.LongTensor([[self.word_map['<start>']]] * self.beam_size).cuda()  # (k, 1)
+        k_prev_words = torch.LongTensor([[self.word_map['<start>']]] * self.beam_size)
+        if self.cuda:
+            k_prev_words = k_prev_words.cuda()  # (k, 1)
 
         # Tensor to store top k sequences; now they're just <start>
         seqs = k_prev_words  # (k, 1)
 
         # Tensor to store top k sequences' scores; now they're just 0
-        top_k_scores = torch.zeros(self.beam_size, 1).cuda()  # (k, 1)
+        top_k_scores = torch.zeros(self.beam_size, 1)
+        if self.cuda:
+            top_k_scores = top_k_scores.cuda()  # (k, 1)
 
         # Lists to store completed sequences and scores
         complete_seqs = list()

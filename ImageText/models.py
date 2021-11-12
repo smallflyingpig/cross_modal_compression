@@ -32,7 +32,9 @@ class Encoder(nn.Module):
         :return: encoded images
         """
         out = self.resnet(images)  # (batch_size, 2048, image_size/32, image_size/32)
+        # print(out.shape)
         out = self.adaptive_pool(out)  # (batch_size, 2048, encoded_image_size, encoded_image_size)
+        # print(out.shape)
         out = out.permute(0, 2, 3, 1)  # (batch_size, encoded_image_size, encoded_image_size, 2048)
         return out
 
@@ -45,7 +47,8 @@ class Encoder(nn.Module):
         for p in self.resnet.parameters():
             p.requires_grad = False
         # If fine-tuning, only fine-tune convolutional blocks 2 through 4
-        for c in list(self.resnet.children())[5:]:
+        # for c in list(self.resnet.children())[5:]:
+        for c in list(self.resnet.children())[2:]:
             for p in c.parameters():
                 p.requires_grad = fine_tune
 

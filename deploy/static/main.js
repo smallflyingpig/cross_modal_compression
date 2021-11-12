@@ -113,7 +113,7 @@ function previewFile(file) {
 //========================================================================
 
 function predictImage_CMC(image) {
-  fetch("/cross_modal_compression/predict", {
+  fetch("/cross_modal_compression_mini/predict", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -145,8 +145,9 @@ function displayResult(data) {
   hide(loader);
   predResult.innerHTML = data.result;
   show(predResult);
-  //rec_imageDisplay.src = imageDisplay.src
+  rec_imageDisplay.src = data.rec 
   show(recResult);
+  // show(rec_imageDisplay);
 }
 
 function hide(el) {

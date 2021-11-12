@@ -128,10 +128,13 @@ def build_super_images(real_imgs, captions, ixtoword,
         minVglobal, maxVglobal = 1, 0
         for j in range(num_attn):
             one_map = attn[j]
+            # print('before pyramid:', one_map.shape)
             if (vis_size // att_sze) > 1:
                 one_map = \
                     skimage.transform.pyramid_expand(one_map, sigma=20,
                                                      upscale=vis_size // att_sze)
+                if one_map.shape[-1]>3:
+                    one_map = one_map[:,:,-3:]
             row_beforeNorm.append(one_map)
             minV = one_map.min()
             maxV = one_map.max()
@@ -146,7 +149,8 @@ def build_super_images(real_imgs, captions, ixtoword,
                 one_map *= 255
                 #
                 PIL_im = Image.fromarray(img.astype(np.uint8))
-                PIL_att = Image.fromarray(one_map.astype(np.uint8))
+                # print(one_map.shape)
+                PIL_att = Image.fromarray(one_map.astype(np.uint8), mode='RGB')
                 merged = \
                     Image.new('RGBA', (vis_size, vis_size), (0, 0, 0, 0))
                 mask = Image.new('L', (vis_size, vis_size), (210))

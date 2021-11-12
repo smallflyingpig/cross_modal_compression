@@ -295,7 +295,7 @@ class condGANTrainer(object):
                 errG_total.backward()
                 optimizerG.step()
                 for p, avg_p in zip(netG.parameters(), avg_param_G):
-                    avg_p.mul_(0.999).add_(0.001, p.data)
+                    avg_p.mul_(0.999).add_(p.data, alpha=0.001)
 
                 if gen_iterations % 100 == 0:
                     print("epoch: {} [{}/{}]".format(epoch, step, self.num_batches) 

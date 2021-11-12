@@ -1,8 +1,10 @@
 from __future__ import print_function
-
 from utils.config import cfg, cfg_from_file
 from utils.dataset import TextDataset, CaptionDatasetMultisize
 from TextImage.trainer import condGANTrainer as trainer
+from TextImage.text_image_utils import weights_init
+from TextImage.model import G_DCGAN, G_NET
+from TextImage.model import RNN_ENCODER, CNN_ENCODER, D_NET64, D_NET128, D_NET256
 
 import os
 import sys
@@ -36,6 +38,136 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=0, help="")
     args = parser.parse_args()
     return args
+
+
+class Evaluator(object):
+    def __init__(self, cfg, dataset, gpu):
+        self.cfg = cfg
+        self.cuda = gpu >=0 and torch.cuda.is_available() 
+        cfg.CUDA = self.cuda 
+        # Get data loader
+        imsize = cfg.TREE.BASE_SIZE * (2 ** (cfg.TREE.BRANCH_NUM - 1))
+        image_transform = transforms.Compose([
+            transforms.Scale(int(imsize * 76 / 64)),
+            transforms.RandomCrop(imsize),
+            transforms.RandomHorizontalFlip()])
+        if dataset == 'bird':
+            dataset = TextDataset(cfg.DATA_DIR, 'val',
+                                  base_size=cfg.TREE.BASE_SIZE,
+                                  transform=image_transform, sample_type='val')
+        elif dataset == 'coco':
+            dataset = CaptionDatasetMultisize(cfg.DATA_DIR, split_dir,
+            base_size=cfg.TREE.BASE_SIZE,
+            transform=image_transform, sample_type='val')
+        else:
+            raise ValueError
+        assert dataset
+        self.dataset = dataset
+        self.n_words = len(dataset.ixtoword)
+
+        self.text_encoder, self.image_encoder, self.netG, self.netDs, _ = self.load_model()
+
+    def load_model(self):
+        image_encoder = CNN_ENCODER(cfg.TEXT.EMBEDDING_DIM)
+        img_encoder_path = cfg.TRAIN.NET_E.replace('text_encoder', 'image_encoder')
+        state_dict = \
+            torch.load(img_encoder_path, map_location=lambda storage, loc: storage)
+        image_encoder.load_state_dict(state_dict)
+        for p in image_encoder.parameters():
+            p.requires_grad = False
+        print('Load image encoder from:', img_encoder_path)
+        image_encoder.eval()
+
+        text_encoder = \
+            RNN_ENCODER(self.n_words, nhidden=cfg.TEXT.EMBEDDING_DIM)
+        state_dict = \
+            torch.load(cfg.TRAIN.NET_E,
+                       map_location=lambda storage, loc: storage)
+        text_encoder.load_state_dict(state_dict)
+        for p in text_encoder.parameters():
+            p.requires_grad = False
+        print('Load text encoder from:', cfg.TRAIN.NET_E)
+        text_encoder.eval()
+
+        netsD = []
+        if cfg.GAN.B_DCGAN:
+            if cfg.TREE.BRANCH_NUM ==1:
+                from model import D_NET64 as D_NET
+            elif cfg.TREE.BRANCH_NUM == 2:
+                from model import D_NET128 as D_NET
+            else:  # cfg.TREE.BRANCH_NUM == 3:
+                from model import D_NET256 as D_NET
+            # TODO: elif cfg.TREE.BRANCH_NUM > 3:
+            netG = G_DCGAN()
+            netsD = [D_NET(b_jcu=False)]
+        else:
+            netG = G_NET()
+            if cfg.TREE.BRANCH_NUM > 0:
+                netsD.append(D_NET64())
+            if cfg.TREE.BRANCH_NUM > 1:
+                netsD.append(D_NET128())
+            if cfg.TREE.BRANCH_NUM > 2:
+                netsD.append(D_NET256())
+            # TODO: if cfg.TREE.BRANCH_NUM > 3:
+        netG.apply(weights_init)
+        # print(netG)
+        for i in range(len(netsD)):
+            netsD[i].apply(weights_init)
+            # print(netsD[i])
+        print('# of netsD', len(netsD))
+        #
+        epoch = 0
+        if cfg.TRAIN.NET_G != '':
+            state_dict = \
+                torch.load(cfg.TRAIN.NET_G, map_location=lambda storage, loc: storage)
+            netG.load_state_dict(state_dict)
+            print('Load G from: ', cfg.TRAIN.NET_G)
+            istart = cfg.TRAIN.NET_G.rfind('_') + 1
+            iend = cfg.TRAIN.NET_G.rfind('.')
+            epoch = cfg.TRAIN.NET_G[istart:iend]
+            epoch = int(epoch) + 1
+            if cfg.TRAIN.B_NET_D:
+                Gname = cfg.TRAIN.NET_G
+                for i in range(len(netsD)):
+                    s_tmp = Gname[:Gname.rfind('/')]
+                    Dname = '%s/netD%d.pth' % (s_tmp, i)
+                    print('Load D from: ', Dname)
+                    state_dict = \
+                        torch.load(Dname, map_location=lambda storage, loc: storage)
+                    netsD[i].load_state_dict(state_dict)
+        # ########################################################### #
+        if cfg.CUDA:
+            text_encoder = text_encoder.cuda().eval()
+            image_encoder = image_encoder.cuda().eval()
+            netG.cuda().eval()
+            for i in range(len(netsD)):
+                netsD[i].cuda().eval()
+        return [text_encoder, image_encoder, netG, netsD, epoch]
+
+    def forward_one_sent(self, sent):
+        word_list = sent.split(' ')
+        word_idx = [self.dataset.wordtoix.get(w, len(self.dataset.wordtoix)-2) for w in word_list]
+        caption = torch.LongTensor(word_idx).unsqueeze(0)
+        caption_len = torch.LongTensor([1])
+        hidden = self.text_encoder.init_hidden(1)
+        nz = cfg.GAN.Z_DIM
+        noise = torch.FloatTensor(1, nz)
+        if self.cuda:
+            caption, caption_len, noise = caption.cuda(), caption_len.cuda(), noise.cuda()
+        words_emb, sent_emb = self.text_encoder(caption, caption_len, hidden)
+        words_emb, sent_emb = words_emb.detach(), sent_emb.detach()
+        mask = (caption==0)
+        num_words = words_emb.size(2)
+        if mask.size(1) > num_words:
+            mask = mask[:, :num_words]
+        
+        noise.data.normal_(0, 1)
+        print(noise.shape, sent_emb.shape, words_emb.shape, mask.shape)
+        fake_imgs, _, mu, logvar = self.netG(noise, sent_emb, words_emb, mask)
+        out_img = fake_imgs[-1].detach().add(1).mul(128).cpu().numpy().astype(np.uint8).squeeze(0)
+        print(out_img.shape)
+        return out_img
+
 
 
 def gen_example(wordtoix, algo, filepath=""):

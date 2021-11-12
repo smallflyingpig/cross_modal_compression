@@ -178,6 +178,7 @@ def validate_one_epoch(epoch_idx:int,
         pred_list.extend(preds)
         assert len(ref_list) == len(pred_list)
         start_time = time.time()
+        print(pred_list[-1]+ref_list[-1][0])
 
     bleu4 = corpus_bleu(ref_list, pred_list)
     rtn = loss_epoch.average()
@@ -243,7 +244,7 @@ def train(args):
     if args.raw_checkpoint != '':
         encoder, decoder = load_raw_checkpoint(args.raw_checkpoint)
     else:
-        encoder = Encoder()
+        encoder = Encoder(encoded_image_size=8)
         decoder =  DecoderWithAttention(attention_dim=cfg.IMAGETEXT.ATTENTION_DIM,
                 embed_dim=cfg.IMAGETEXT.EMBED_DIM,
                 decoder_dim=cfg.IMAGETEXT.DECODER_DIM,
@@ -254,7 +255,7 @@ def train(args):
             encoder, decoder = load_checkpoint(encoder, decoder,
                     cfg.IMAGETEXT.CHECKPOINT)
     
-    encoder.fine_tune(False)
+    encoder.fine_tune(True) # key point
     # to cuda
     encoder = encoder.cuda()
     decoder = decoder.cuda()
