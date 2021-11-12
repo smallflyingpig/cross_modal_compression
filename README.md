@@ -15,14 +15,36 @@ office repository for ACM MM 2021 paper: "Cross Modal Compression: "Cross Modal 
 ## data preparing
 ### download dataset and pretrained model
  - you can download CUB-200-2011 dataset and MS COCO 2014 from the offficial site
- - download our json file for MS COCO from [here](link)
- - download our pretrained models from [here](link)
+ - download our json file for MS COCO from [here](https://drive.google.com/drive/folders/1G5EU9w5t7SaYMiuY4FHW9gJKF1u2oa0T?usp=sharing)
+ - download our pretrained models from [here](https://drive.google.com/drive/folders/11x85FXGBMyQoB5Tl2bn6GqBotpAxDM7B?usp=sharing)
 
 ## training the CMC
+```
+export PYTHONPATH=path_for_this_project
+```
 ### training the DAMSM model
+```
+# for CUB dataset
+python ./TextImage/pretrain_DAMSM.py --cfg ./cfg/bird_DAMSM.yml --data_dir ./data/birds --dataset bird --output_dir ./output/TextImage --no_dist
+# for COCO
+python ./TextImage/pretrain_DAMSM.py --cfg ./cfg/coco_DAMSM.yml --data_dir ./data/coco --dataset coco --output_dir ./output/TextImage --no_dist
+```
 ### training the ImageText model
+```
+# for CUB
+python ./ImageText/train.py --cfg ./cfg/bird_train.yml --data_dir ./data/birds --dataset bird --output_dir ./output/ImageText
+# for COCO
+python ./ImageText/train.py --cfg ./cfg/coco_train.yml --data_dir ./data/coco --dataset coco --output_dir ./output/ImageText
+```
 ### training the TextImage model
-
+```
+# for CUB
+# first set the text encoder path in ./cfg/bird_train.yml: TRAIN.NET_E
+python ./TextImage/train.py --cfg ./bird_train.yml --data_dir ./data/birds --dataset bird --output_dir ./output/TextImage
+# for COCO
+# first set the text encoder path in ./cfg/coco_train.yml: TRAIN.NET_E
+python ./TextImage/train.py --cfg ./coco_train.yml --data_dir ./data/coco --dataset coco --output_dir ./output/TextImage
+```
 ## eval the CMC
 1. write the pretrained models' paths in cfg/bird_eval.yml for CUB-200-2011 dataset or cfg/coco_eval.yml for MS COCO dataset
 2. run
@@ -37,6 +59,7 @@ python ./ImageText/end_to_end_test.py --cfg cfg/coco_eval.yml --data_dir CUB_PAT
 
 # project home page
 https://smallflyingpig.github.io/cross_modal_compression_mainpage/main.html
+Feel free to mail me at: jiguo.li@vipl.ict.ac.cn/jgli@pku.edu.cn, if you have any question about this project.
 
 # Acknowledgement
 Thanks to the valuable discussion with Junlong Gao. Besides, thanks to the open source of [COCO API](https://github.com/cocodataset/cocoapi), [AttnGAN](https://github.com/taoxugit/AttnGAN), [a-PyTorch-Tutorial-to-Image-Captioning](https://github.com/sgrvinod/a-PyTorch-Tutorial-to-Image-Captioning).
