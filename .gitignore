@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# checkpoint
+*.pickle
+*.pth
+*.png
+./output/*
