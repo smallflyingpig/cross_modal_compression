@@ -15,8 +15,8 @@ office repository for ACM MM 2021 paper: "Cross Modal Compression: "Cross Modal 
 ## data preparing
 ### download dataset and pretrained model
  - you can download CUB-200-2011 dataset and MS COCO 2014 from the offficial site
- - download our json file for MS COCO from [here](https://drive.google.com/drive/folders/1G5EU9w5t7SaYMiuY4FHW9gJKF1u2oa0T?usp=sharing)
- - download our pretrained models from [here](https://drive.google.com/drive/folders/11x85FXGBMyQoB5Tl2bn6GqBotpAxDM7B?usp=sharing)
+ - download our json file for MS COCO from here([google drive](https://drive.google.com/drive/folders/1G5EU9w5t7SaYMiuY4FHW9gJKF1u2oa0T?usp=sharing), [百度网盘](https://pan.baidu.com/s/13QFoVABF4Z3cNYj2u4VBeQ)提取码：c31g)
+ - download our pretrained models from here([google drive](https://drive.google.com/drive/folders/11x85FXGBMyQoB5Tl2bn6GqBotpAxDM7B?usp=sharing), [百度网盘](https://pan.baidu.com/s/17npC-FPgzocmbs_Eihgx2A)提取码：i0un)
 
 ## training the CMC
 ```
