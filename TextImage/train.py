@@ -162,10 +162,10 @@ class Evaluator(object):
             mask = mask[:, :num_words]
         
         noise.data.normal_(0, 1)
-        print(noise.shape, sent_emb.shape, words_emb.shape, mask.shape)
+        # print(noise.shape, sent_emb.shape, words_emb.shape, mask.shape)
         fake_imgs, _, mu, logvar = self.netG(noise, sent_emb, words_emb, mask)
         out_img = fake_imgs[-1].detach().add(1).mul(128).cpu().numpy().astype(np.uint8).squeeze(0)
-        print(out_img.shape)
+        # print(out_img.shape)
         return out_img
 
 

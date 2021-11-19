@@ -329,7 +329,7 @@ class INIT_STAGE_G(nn.Module):
         """
         c_z_code = torch.cat((c_code, z_code), 1)
         # state size ngf x 4 x 4
-        print(c_z_code.shape)
+        # print(c_z_code.shape)
         out_code = self.fc(c_z_code)
         out_code = out_code.view(-1, self.gf_dim, 4, 4)
         # state size ngf/3 x 8 x 8

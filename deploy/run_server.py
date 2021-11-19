@@ -193,7 +193,11 @@ def Image2Base64(img:Image):
 def predict():
     if request.method == 'POST':
         # Get the image from post request
-        img = base64_to_pil(request.json)
+        # print(request.json)
+        json_data = request.json
+
+        img = base64_to_pil(json_data['img'])
+        print(f"dataset: {json_data['dataset']}")
 
         # Save the image to ./uploads
         # img.save("./uploads/image.png")

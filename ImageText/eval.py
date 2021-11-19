@@ -95,7 +95,7 @@ class Evaluator(object):
     def forward_one_img(self, img, bbox=None):
 
         img_tensor = get_img_tensor(img, imsize=self.imsize, bbox=bbox, transform=None, normalize=self.norm).unsqueeze(0)
-        print(img_tensor.shape)
+        # print(img_tensor.shape)
         if img_tensor.shape[1]>3:
             img_tensor = img_tensor[:, :3, :, :]
         if self.cuda:

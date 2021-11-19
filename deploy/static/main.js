@@ -28,6 +28,14 @@ function fileSelectHandler(e) {
   }
 }
 
+function changeDataset() {
+    var nSel = document.getElementById('datasetSel');
+    var index = nSel.selectedIndex;
+    var value = nSel.options[index].value;
+    // clear preview
+    clearImage()
+}
+
 //========================================================================
 // Web page elements for functions to use
 //========================================================================
@@ -48,7 +56,7 @@ function submitImage_CMC() {
   // action for the submit button
   console.log("submit");
 
-  if (!imageDisplay.src || !imageDisplay.src.startsWith("data")) {
+  if ((!imageDisplay.src || !imageDisplay.src.startsWith("data")))
     window.alert("Please select an image before submit.");
     return;
   }
@@ -102,9 +110,12 @@ function previewFile(file) {
 
     recResult.innerHTML = ""
     rec_imageDisplay.classList.remove("loading")
-
+    
+    var nSel = document.getElementById('datasetSel');
+    var index = nSel.selectedIndex;
+    var value = nSel.options[index].value;
     displayImage(reader.result, "image-display");
-    displayImage(reader.result, 'rec-image-display')
+    displayImage(reader.result, 'rec-image-display')    
   };
 }
 
@@ -113,12 +124,16 @@ function previewFile(file) {
 //========================================================================
 
 function predictImage_CMC(image) {
+  var nSel = document.getElementById('datasetSel');
+  var index = nSel.selectedIndex;
+  var value = nSel.options[index].value;
+
   fetch("/cross_modal_compression_mini/predict", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(image)
+    body: JSON.stringify({'img':image, 'dataset':value})
   })
     .then(resp => {
       if (resp.ok)
