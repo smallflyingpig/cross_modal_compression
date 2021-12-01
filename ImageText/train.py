@@ -58,12 +58,13 @@ def train_one_epoch(epoch_idx:int,
         imgs, caps, cap_lens, class_id, filename = data
         if isinstance(imgs, list):
             imgs = imgs[-1]
-        imgs, caps, cap_lens = imgs.cuda(), caps.cuda(), cap_lens.cuda()
+        imgs, caps, cap_lens, class_id = imgs.cuda(), caps.cuda(), cap_lens.cuda(), class_id.cuda()
+        class_id = class_id-1
         # print(caps.shape)
         if len(caps.shape) == 3 and caps.shape[-1]==1:
             caps = caps.squeeze(2)
         # forward
-        imgs = encoder(imgs)
+        imgs, cls_pred = encoder(imgs)
         scores, caps_sorted, decode_lengths, alphas, sort_ind = \
             decoder(imgs, caps, cap_lens)
         targets = caps_sorted[:, 1:]
@@ -72,7 +73,7 @@ def train_one_epoch(epoch_idx:int,
         targets = pack_padded_sequence(targets, decode_lengths,
                 batch_first=True).data
 
-        loss_ce = loss_func(scores, targets) 
+        loss_ce = loss_func(scores, targets) + 1.0 * loss_func(cls_pred, class_id)
         loss_attn = (1.0 - alphas.sum(dim=1)**2).mean() 
 
         loss_total = loss_ce + cfg.IMAGETEXT.ALPHA_C * loss_attn
@@ -135,7 +136,7 @@ def validate_one_epoch(epoch_idx:int,
         if len(caps.shape) == 3 and caps.shape[-1] == 1:
             caps = caps.squeeze(2)
         # forward
-        imgs = encoder(imgs)
+        imgs, cls_pred = encoder(imgs)
         scores, caps_sorted, decode_lengths, alphas, sort_ind = \
             decoder(imgs, caps, cap_lens)
         targets = caps_sorted[:, 1:]
@@ -178,7 +179,7 @@ def validate_one_epoch(epoch_idx:int,
         pred_list.extend(preds)
         assert len(ref_list) == len(pred_list)
         start_time = time.time()
-        print(pred_list[-1]+ref_list[-1][0])
+        # print(pred_list[-1]+ref_list[-1][0])
 
     bleu4 = corpus_bleu(ref_list, pred_list)
     rtn = loss_epoch.average()

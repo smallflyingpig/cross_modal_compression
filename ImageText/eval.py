@@ -100,7 +100,7 @@ class Evaluator(object):
             img_tensor = img_tensor[:, :3, :, :]
         if self.cuda:
             img_tensor = img_tensor.cuda()
-        encoder_out = self.encoder(img_tensor)
+        encoder_out, cls_pred = self.encoder(img_tensor)
         enc_img_size, encoder_dim = encoder_out.size(1), encoder_out.size(3)
         # Flatten encoding
         encoder_out = encoder_out.view(1, -1, encoder_dim)  # (1, num_pixels, encoder_dim)
@@ -231,7 +231,7 @@ def evaluate(val_dataloader:DataLoader,
         k = beam_size
         imgs, all_caps = \
             imgs.cuda(), all_caps.cuda()
-        encoder_out = encoder(imgs)
+        encoder_out, cls_pred = encoder(imgs)
         enc_img_size, encoder_dim = encoder_out.size(1), encoder_out.size(3)
         # Flatten encoding
         encoder_out = encoder_out.view(1, -1, encoder_dim)  # (1, num_pixels, encoder_dim)
